@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=0.8">
+    <title>Game Pad</title>
+    <style>
+        :root {
+            --color-primary: #5555;
+            --color-on-primary: #fff;
+            --color-secondary: #5551;
+            --active-height: 95vh;
+            --color-background:
+                /* #0088ff77 */
+                #fff;
+        }
+
+        html {
+            text-orientation: upright;
+            height: 100vh;
+            width: 100vw;
+            background: linear-gradient(45deg, var(--color-background), white);
+        }
+
+        body,
+        #container {
+            height: 100%;
+            width: 100%;
+        }
+
+        #container {
+            display: flex;
+            flex-flow: row nowrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #joystick {
+            width: var(--active-height);
+            /* warn: might cause issues */
+            height: var(--active-height);
+            min-width: 200px;
+            /* todo: UPDATE */
+            border-radius: 5px;
+            border: solid 2px var(--color-primary);
+            position: relative;
+        }
+
+        #joystick>.circle {
+            opacity: 0;
+            transition: opacity 0.1s, transform 0.1s;
+        }
+
+        /* #joystick:hover>.circle,
+        #joystick:active>.circle {
+            opacity: 1;
+        } */
+
+        .circle {
+            border-radius: 50%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform: translate(-50%, -50%);
+            border: solid var(--color-primary);
+            background-color: var(--color-secondary);
+        }
+
+        #circle1 {
+            height: 15vh;
+            width: 15vh;
+        }
+
+        #circle2 {
+            height: 12vh;
+            width: 12vh;
+        }
+
+        #circle3 {
+            height: 9vh;
+            width: 9vh;
+        }
+
+        #circle4 {
+            height: 6vh;
+            width: 6vh;
+        }
+
+        #touchpad {
+            width: var(--active-height);
+            height: var(--active-height);
+            min-width: 200px;
+            display: flex;
+            flex-flow: row nowrap;
+            justify-content: space-between;
+        }
+
+        #button-column {
+            height: 100%;
+            width: fit-content;
+            display: flex;
+            flex-flow: column nowrap;
+            justify-content: space-between;
+            padding-right: 2mm;
+        }
+
+
+        #up,
+        #down {
+            width: 45vh;
+            height: 45vh;
+            /* warn: issues */
+            border-color: var(--color-primary);
+            color: var(--color-primary);
+            border-radius: 5px;
+            font-weight: 1000;
+            font-size: 2em;
+            background-color: var(--color-background);
+            transition: none;
+        }
+
+        #up:active,
+        #down:active {
+            background-color: var(--color-primary);
+            color: var(--color-on-primary);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="container">
+        <div id="joystick">
+            <div class="circle" id="circle4"></div>
+            <div class="circle" id="circle3"></div>
+            <div class="circle" id="circle2"></div>
+            <div class="circle" id="circle1"></div>
+        </div>
+
+        <div id="touchpad">
+            <div id="others"></div>
+            <div id="button-column">
+                <button id="up">UP</button>
+                <button id="down">DOWN</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        const ACTION_CLICK = 254;
+        const ACTION_PRESS = 253;
+        const ACTION_RELEASE = 252;
+
+        const ACTION_MOVE_TO = 251;
+        const ACTION_MOVE_BY = 250;
+
+        const ACTION_LEFT_CLICK = 249;
+        const ACTION_LEFT_PRESS = 248;
+        const ACTION_LEFT_RELEASE = 249;
+        const ACTION_RIGHT_CLICK = 247;
+        const ACTION_RIGHT_PRESS = 246;
+        const ACTION_RIGHT_RELEASE = 245;
+        const ESCAPE_CODE = 255;
+
+        joystick;
+        joystickLoopId = 0;
+
+        touchPadLastX = -1;
+        touchPadLastY = -1;
+        touchPadX = -1;
+        touchPadY = -1;
+        touchPadLoopId = 0;
+        class Joystick {
+            loopId = 0;
+            rect;
+            startX;
+            startY;
+            x;
+            x;
+            circles;
+            el = document.body; //todo
+            constructor(el) {
+                this.el = el;
+                this.circles = el.querySelectorAll(":scope > .circle");
+                this.updateRect();
+                this.reset();
+                this.initCallbacks();
+            }
+            updateRect = () => {
+                this.rect = this.el.getBoundingClientRect();
+            }
+            reset = () => {
+                this.startX = this.x = (this.rect.left + this.rect.right) / 2;
+                this.startY = this.y = (this.rect.top + this.rect.bottom) / 2;
+            }
+            initCallbacks = () => {
+                this.el.ontouchstart = (ev) => {
+                    this.startX = this.x = ev.targetTouches[0].pageX;
+                    this.startY = this.y = ev.targetTouches[0].pageY;
+                    this.updateLoop();
+                    this.showCircles();
+                };
+                this.el.ontouchmove = (ev) => {
+                    this.x = ev.targetTouches[0].pageX;
+                    this.y = ev.targetTouches[0].pageY;
+                };
+                this.el.ontouchend = this.el.ontouchcancel = () => {
+                    this.reset(); clearTimeout(this.loopId);
+                    this.hideCircles();
+                };
+            }
+            update = () => {
+                for (let ind = 0; ind < this.circles.length; ind++) {
+                    let pX = this.startX + ind / (this.circles.length - 1) * this.getDx();
+                    let pY = this.startY + ind / (this.circles.length - 1) * this.getDy();
+                    let string = `translate(-50%, -50%) translateX(${pX - this.rect.left}px) translateY(${pY - this.rect.top}px)`;
+                    this.circles[ind].style.transform = string;
+                }
+            }
+            updateLoop = () => {
+                clearTimeout(this.loopId);
+                this.update();
+                this.loopId = setTimeout(this.updateLoop, 50);
+            }
+            //for compatibility:
+            showCircles = () => {
+                for (let ind = 0; ind < this.circles.length; ind++) {
+                    let circle = this.circles[ind];
+                    circle.style.opacity = 1;
+                }
+            }
+            hideCircles = () => {
+                for (let ind = 0; ind < this.circles.length; ind++) {
+                    let circle = this.circles[ind];
+                    circle.style.opacity = 0;
+                }
+            }
+            //basic interface:
+            getDxMax = () => {
+                return (this.rect.right - this.rect.left) / 2;
+            }
+
+            getDyMax = () => {
+                return (this.rect.bottom - this.rect.top) / 2;
+            }
+
+            getDx = () => {
+                return this.x - this.startX
+            }
+
+            getDy = () => {
+                return this.y - this.startY;
+            }
+        }
+
+
+        window.onload = () => {
+            joystick = new Joystick(document.getElementById("joystick"));
+            document.getElementById("up").onclick = (ev) => { sendCharacter(' '); ev.stopPropagation(); };
+            document.getElementById("down").onclick = (ev) => { sendCharacterCode(14); ev.stopPropagation(); }//warn:check
+            let t = document.getElementById("touchpad");
+            t.ontouchstart = t.ontouchmove = (ev) => {
+                touchPadX = ev.targetTouches[0].pageX;
+                touchPadLastY = ev.targetTouches[0].pageY;
+            }
+        };
+        joystickLoop = () => {
+            clearTimeout(joystickLoopId);
+            let dx = joystick.getDx(), mDx = joystick.getDxMax(), dy = joystick.getDy(), mDy = joystick.getDyMax();
+            if (dx > mDx / 2) sendCharacter('d'); else if (dx < -mDx / 2) sendCharacter('a');
+            if (dy > mDy / 2) sendCharacter('s'); else if (dy < -mDy / 2) sendCharacter('w');
+            joystickLoopId = setTimeout(joystickLoop, 50);//todo: optimize
+        }
+        touchPadLoop = () => {
+            clearTimeout(touchPadLoopId);
+            if (touchPadLastX == -1 || touchPadLastY == -1) {
+                if (touchPadX > 0 && touchPadY > 0) {
+                    touchPadLastX = touchPadX;
+                    touchPadLastY = touchPadY; s
+                }
+                return;
+            }
+            let dx = touchPadX - touchPadLastX;
+            let dy = touchPadY - touchPadLastY;
+            if (Math.abs(dx) > 2 || Math.abs(dy) > 0) {//todo: optimize
+                sendMoveBy(dx, dy)
+            }
+            touchPadLoopId = (touchPadLoop, 30);//todo: optimize
+        }
+
+        //connection:
+        sendCharacter = (char) => {
+            sendCharacterCode(char.charCodeAt(0));
+        }
+        sendCharacterCode = (charCode) => {
+            sendControl(ACTION_CLICK);
+            sendData(charCode);
+        }
+        sendMoveBy = (dx, dy) => {
+            sendControl(ACTION_MOVE_BY);
+            sendData(dx & 0xff);
+            sendData(dx & 0xff00);
+            sendData(dx & 0xff0000);
+            sendData(dx & 0xff000000);
+            sendData(dy & 0xff);
+            sendData(dy & 0xff00);
+            sendData(dy & 0xff0000);
+            sendData(dy & 0xff000000);
+        }
+
+        sendMoveTo = (x, y) => {
+            sendControl(ACTION_MOVE_TO);
+            sendData(x & 0xff);
+            sendData(x & 0xff00);
+            sendData(x & 0xff0000);
+            sendData(x & 0xff000000);
+            sendData(y & 0xff);
+            sendData(y & 0xff00);
+            sendData(y & 0xff0000);
+            sendData(y & 0xff000000);
+        }
+
+        sendLeftClick = () => sendControl(ACTION_LEFT_CLICK);
+        sendRightClick = () => sendControl(ACTION_RIGHT_CLICK);
+        
+        sendControl = (byte) => { }
+        sendData = (byte) => { }
+
+    </script>
+</body>
+
+</html>
