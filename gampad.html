@@ -11,6 +11,7 @@
             --color-primary: #5555;
             --color-on-primary: #fff;
             --color-secondary: #5551;
+            --color-special1: skyblue;
             --active-height: 95vh;
             --color-background:
                 /* #0088ff77 */
@@ -126,6 +127,84 @@
             background-color: var(--color-primary);
             color: var(--color-on-primary);
         }
+
+        #dialog {
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            background-color: black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.3;
+            display: none;
+        }
+
+        #dialog>#input-cont {
+            padding: 6mm;
+            background-color: var(--color-background);
+            border-radius: 5px;
+        }
+
+        #dialog>#input-cont>input {
+            border-radius: 5px;
+            border: inset 1px;
+            text-indent: 1ex;
+        }
+
+        #dialog>#input-cont>button {
+            border-radius: 5px;
+            background-color: var(--color-background);
+            border: solid 1px var(--color-special1);
+            color: var(--color-special1);
+        }
+
+        #dialog>#input-cont>button:active {
+            background-color: var(--color-special1);
+            color: var(--color-background);
+        }
+
+        #others {
+            display: flex;
+            flex-flow: row wrap;
+            font-weight: 700;
+            font-size: 1.3em;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding: 2mm;
+            height: min-content;
+        }
+
+        #disconnect {
+            background-color: var(--color-special1);
+            border: solid var(--color-special1) 1px;
+            color: var(--color-background);
+            border-radius: 5px;
+            transition: transform 0.3s;
+            width: 100%;
+            margin-bottom: 2mm;
+        }
+
+        #disconnect:active {
+            transform: scale(0.9);
+        }
+
+        #left,
+        #right {
+            width: 45%;
+            background-color: var(--color-background);
+            border: solid var(--color-special1) 1px;
+            color: var(--color-special1);
+            border-radius: 5px;
+        }
+
+        #left.active,
+        #right.active {
+            background-color: var(--color-special1);
+            color: var(--color-background)
+        }
     </style>
 </head>
 
@@ -139,10 +218,20 @@
         </div>
 
         <div id="touchpad">
-            <div id="others"></div>
+            <div id="others">
+                <button id="disconnect">DISCONNECT</button>
+                <button id="left">LEFT</button>
+                <button id="right">RIGHT</button>
+            </div>
             <div id="button-column">
                 <button id="up">UP</button>
                 <button id="down">DOWN</button>
+            </div>
+        </div>
+        <div id="dialog">
+            <div id="input-cont">
+                <input name="url" id="url-input" />
+                <button id="connect">CONNECT</button>
             </div>
         </div>
     </div>
@@ -253,6 +342,48 @@
             }
         }
 
+        class LongClick {
+            startTime = -1;
+            duration;
+            callback;
+            el;
+            ev;
+            x;
+            y;
+            constructor(el, callback, duration = 200) {
+                this.duration = duration;
+                this.el = el;
+                this.callback = callback;
+                this.el.addEventListener("touchstart", this.ontouchstart);
+                this.el.addEventListener("touchend", this.ontouchend);
+                this.el.addEventListener("touchcancel", this.ontouchend);
+                this.el.addEventListener("touchmove", this.ontouchmove);
+            }
+
+            ontouchstart = (ev) => {
+                console.log("touch started")
+                this.startTime = new Date().getTime();
+                this.ev = ev;
+                this.x = this.ev.targetTouches[0].pageX;
+                this.y = this.ev.targetTouches[0].pageY
+            }
+            ontouchmove = (ev) => {
+                this.x = this.ev.targetTouches[0].pageX;
+                this.y = this.ev.targetTouches[0].pageY
+            }
+            ontouchend = (ev) => {
+                console.log("touch ended")
+
+                if (this.startTime > -1) {
+                    let time = new Date().getTime();
+                    if (time - this.startTime >= this.duration) {
+                        let rect = this.el.getBoundingClientRect();
+                        if (this.x >= rect.left && this.x <= rect.right && this.y >= rect.top && this.y <= rect.bottom) this.callback(this.ev);
+                    }
+                }
+            }
+        }
+
 
         window.onload = () => {
             joystick = new Joystick(document.getElementById("joystick"));
@@ -263,6 +394,14 @@
                 touchPadX = ev.targetTouches[0].pageX;
                 touchPadLastY = ev.targetTouches[0].pageY;
             }
+            document.getElementById("connect").onclick = () => window.connect(document.getElementById("url-input"));
+            document.getElementById("disconnect").onclick = () => window.disconnect();
+            let left = document.getElementById("left");
+            left.onclick = () => { sendLeftClick(); left.classList.remove("active") };
+            new LongClick(left, () => { sendLeftPress(); left.classList.add("active") });
+            let right = document.getElementById("right");
+            right.onclick = () => { sendRightClick(); right.classList.remove("active") }
+            new LongClick(right, () => { sendRightPress(); right.classList.add("active") });
         };
         joystickLoop = () => {
             clearTimeout(joystickLoopId);
@@ -289,6 +428,8 @@
         }
 
         //connection:
+        connect = (url) => { }
+        disconnect = () => { }
         sendCharacter = (char) => {
             sendCharacterCode(char.charCodeAt(0));
         }
@@ -322,7 +463,8 @@
 
         sendLeftClick = () => sendControl(ACTION_LEFT_CLICK);
         sendRightClick = () => sendControl(ACTION_RIGHT_CLICK);
-        
+        sendLeftPress = () => { sendControl(ACTION_LEFT_PRESS); }
+        sendRightPress = () => { sendControl(ACTION_RIGHT_PRESS); }
         sendControl = (byte) => { }
         sendData = (byte) => { }
 
