@@ -134,11 +134,13 @@
             position: absolute;
             top: 0;
             bottom: 0;
-            background-color: black;
+            background-color: #000c;
+            backdrop-filter: blur(3px);
+
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.3;
+            transition: opacity 0.3s;
             display: none;
         }
 
@@ -198,6 +200,8 @@
             border: solid var(--color-special1) 1px;
             color: var(--color-special1);
             border-radius: 5px;
+            padding-top: 2mm;
+            padding-bottom: 2mm;
         }
 
         #left.active,
@@ -236,29 +240,37 @@
         </div>
     </div>
     <script>
-        const ACTION_CLICK = 254;
-        const ACTION_PRESS = 253;
-        const ACTION_RELEASE = 252;
+        const ACTION_CLICK = 1;
+        const ACTION_PRESS = 2;
+        const ACTION_RELEASE = 3;
 
-        const ACTION_MOVE_TO = 251;
-        const ACTION_MOVE_BY = 250;
+        const ACTION_MOVE_TO = 4;
+        const ACTION_MOVE_BY = 5;
 
-        const ACTION_LEFT_CLICK = 249;
-        const ACTION_LEFT_PRESS = 248;
-        const ACTION_LEFT_RELEASE = 249;
-        const ACTION_RIGHT_CLICK = 247;
-        const ACTION_RIGHT_PRESS = 246;
-        const ACTION_RIGHT_RELEASE = 245;
-        const ESCAPE_CODE = 255;
+        const ACTION_LEFT_CLICK = 6;
+        const ACTION_LEFT_PRESS = 7;
+        const ACTION_LEFT_RELEASE = 8;
+        const ACTION_RIGHT_CLICK = 9;
+        const ACTION_RIGHT_PRESS = 10;
+        const ACTION_RIGHT_RELEASE = 11;
+        const ESCAPE_CODE = 12;
 
-        joystick;
-        joystickLoopId = 0;
+        const MAX_RETRY = 5;
+        const RETRY_INTERVAL = 300;
+        var joystick,
+            joystickLoopId = 0,
 
-        touchPadLastX = -1;
-        touchPadLastY = -1;
-        touchPadX = -1;
-        touchPadY = -1;
-        touchPadLoopId = 0;
+            touchPadLastX = -1,
+            touchPadLastY = -1,
+            touchPadX = -1,
+            touchPadY = -1,
+            touchPadLoopId = 0,
+
+            dialog,
+            input,
+
+            url,
+            connection;
         class Joystick {
             loopId = 0;
             rect;
@@ -343,6 +355,7 @@
         }
 
         class LongClick {
+            checkCallId = 0;
             startTime = -1;
             duration;
             callback;
@@ -361,26 +374,22 @@
             }
 
             ontouchstart = (ev) => {
-                console.log("touch started")
+
                 this.startTime = new Date().getTime();
                 this.ev = ev;
                 this.x = this.ev.targetTouches[0].pageX;
-                this.y = this.ev.targetTouches[0].pageY
+                this.y = this.ev.targetTouches[0].pageY;
+                this.checkCallId = setTimeout(this.longPressed, this.duration);
             }
             ontouchmove = (ev) => {
                 this.x = this.ev.targetTouches[0].pageX;
                 this.y = this.ev.targetTouches[0].pageY
             }
             ontouchend = (ev) => {
-                console.log("touch ended")
-
-                if (this.startTime > -1) {
-                    let time = new Date().getTime();
-                    if (time - this.startTime >= this.duration) {
-                        let rect = this.el.getBoundingClientRect();
-                        if (this.x >= rect.left && this.x <= rect.right && this.y >= rect.top && this.y <= rect.bottom) this.callback(this.ev);
-                    }
-                }
+                clearTimeout(this.checkCallId);
+            }
+            longPressed = () => {
+                this.callback(this.ev);
             }
         }
 
@@ -392,81 +401,152 @@
             let t = document.getElementById("touchpad");
             t.ontouchstart = t.ontouchmove = (ev) => {
                 touchPadX = ev.targetTouches[0].pageX;
-                touchPadLastY = ev.targetTouches[0].pageY;
+                touchPadY = ev.targetTouches[0].pageY;
             }
-            document.getElementById("connect").onclick = () => window.connect(document.getElementById("url-input"));
-            document.getElementById("disconnect").onclick = () => window.disconnect();
+            dialog = document.getElementById("dialog")
+            input = document.getElementById("url-input");
+            input.onkeydown = (ev) => input.style.color = "";
+
+            document.getElementById("connect").onclick = () => {
+                if (connect(input.value))
+                    hideDialog();
+                else
+                    input.style.color = "red";
+            }
+            document.getElementById("disconnect").onclick = () => { disconnect(); showDialog(); }
             let left = document.getElementById("left");
             left.onclick = () => { sendLeftClick(); left.classList.remove("active") };
+            left.ontouchstart = () => left.classList.add("active");
             new LongClick(left, () => { sendLeftPress(); left.classList.add("active") });
             let right = document.getElementById("right");
             right.onclick = () => { sendRightClick(); right.classList.remove("active") }
+            right.ontouchstart = () => right.classList.add("active");
             new LongClick(right, () => { sendRightPress(); right.classList.add("active") });
+            showDialog();
         };
-        joystickLoop = () => {
+
+        const joystickLoop = () => {
             clearTimeout(joystickLoopId);
             let dx = joystick.getDx(), mDx = joystick.getDxMax(), dy = joystick.getDy(), mDy = joystick.getDyMax();
-            if (dx > mDx / 2) sendCharacter('d'); else if (dx < -mDx / 2) sendCharacter('a');
-            if (dy > mDy / 2) sendCharacter('s'); else if (dy < -mDy / 2) sendCharacter('w');
+            const divider = 5;
+            if (dx > mDx / divider) sendCharacter('d'); else if (dx < -mDx / divider) sendCharacter('a');
+            if (dy > mDy / divider) sendCharacter('s'); else if (dy < -mDy / divider) sendCharacter('w');
             joystickLoopId = setTimeout(joystickLoop, 50);//todo: optimize
         }
-        touchPadLoop = () => {
+        const touchPadLoop = () => {
             clearTimeout(touchPadLoopId);
             if (touchPadLastX == -1 || touchPadLastY == -1) {
                 if (touchPadX > 0 && touchPadY > 0) {
                     touchPadLastX = touchPadX;
-                    touchPadLastY = touchPadY; s
+                    touchPadLastY = touchPadY;
                 }
-                return;
+            } else {
+                let dx = touchPadX - touchPadLastX;
+                let dy = touchPadY - touchPadLastY;
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {//todo: optimize
+                    touchPadLastX = touchPadX;
+                    touchPadLastY = touchPadY;
+                    sendMoveBy(dx, dy);
+                }
             }
-            let dx = touchPadX - touchPadLastX;
-            let dy = touchPadY - touchPadLastY;
-            if (Math.abs(dx) > 2 || Math.abs(dy) > 0) {//todo: optimize
-                sendMoveBy(dx, dy)
-            }
-            touchPadLoopId = (touchPadLoop, 30);//todo: optimize
+            touchPadLoopId = setTimeout(touchPadLoop, 30);//todo: optimize
         }
 
+        const showDialog = () => {
+            dialog.style.opacity = 0;
+            dialog.style.display = "flex";
+            Promise.resolve().then(() => dialog.style.opacity = 1);
+            clearTimeout(touchPadLoopId);
+            clearTimeout(joystickLoopId);
+        }
+        const hideDialog = () => {
+            dialog.style.opacity = 0;
+            setTimeout(() => dialog.style.display = "none", 300);
+            touchPadLoop();
+            joystickLoop();
+        }
         //connection:
-        connect = (url) => { }
-        disconnect = () => { }
-        sendCharacter = (char) => {
+        const connect = (url) => {
+            if (!url.startsWith("ws")) url = "ws://" + url;
+            window.url = url;
+            try { connection = new WebSocket(url); } catch (e) {
+                return false;
+            }
+            return true;
+        }
+        const disconnect = () => {
+            connection.close();
+            connection = null;
+        }
+
+        var trying = false;
+        var tryingCount = 0;
+        const tryReconnecting = () => {
+            if (trying) return;
+            _tryingLoop();
+        }
+
+        const _tryingLoop = () => {
+
+            if (connect(url)) {
+                trying = false;
+                tryingCount = 0;
+            } else {
+                tryingCount++;
+                if (tryingCount >= MAX_RETRY) {
+                    trying = false;
+                    tryingCount = 0;
+                    disconnect();
+                    showDialog();
+                } else setTimeout(_tryingLoop, RETRY_INTERVAL);
+            }
+        }
+        const sendCharacter = (char) => {
             sendCharacterCode(char.charCodeAt(0));
         }
-        sendCharacterCode = (charCode) => {
-            sendControl(ACTION_CLICK);
-            sendData(charCode);
+        const sendCharacterCode = (charCode) => {
+            send(String.fromCharCode(ACTION_CLICK, charCode));
         }
-        sendMoveBy = (dx, dy) => {
-            sendControl(ACTION_MOVE_BY);
-            sendData(dx & 0xff);
-            sendData(dx & 0xff00);
-            sendData(dx & 0xff0000);
-            sendData(dx & 0xff000000);
-            sendData(dy & 0xff);
-            sendData(dy & 0xff00);
-            sendData(dy & 0xff0000);
-            sendData(dy & 0xff000000);
+        const sendMoveBy = (dx, dy) => {
+            send(String.fromCharCode(ACTION_MOVE_BY) + intToByteString(dx) + intToByteString(dy));
         }
 
-        sendMoveTo = (x, y) => {
-            sendControl(ACTION_MOVE_TO);
-            sendData(x & 0xff);
-            sendData(x & 0xff00);
-            sendData(x & 0xff0000);
-            sendData(x & 0xff000000);
-            sendData(y & 0xff);
-            sendData(y & 0xff00);
-            sendData(y & 0xff0000);
-            sendData(y & 0xff000000);
+        const sendMoveTo = (x, y) => {
+            send(String.fromCharCode(ACTION_MOVE_TO) + intToByteString(x) + intToByteString(y));
         }
 
-        sendLeftClick = () => sendControl(ACTION_LEFT_CLICK);
-        sendRightClick = () => sendControl(ACTION_RIGHT_CLICK);
-        sendLeftPress = () => { sendControl(ACTION_LEFT_PRESS); }
-        sendRightPress = () => { sendControl(ACTION_RIGHT_PRESS); }
-        sendControl = (byte) => { }
-        sendData = (byte) => { }
+
+
+        const sendLeftClick = () => send(byteToByteString(ACTION_LEFT_CLICK));
+        const sendRightClick = () => send(byteToByteString(ACTION_RIGHT_CLICK));
+        const sendLeftPress = () => send(byteToByteString(ACTION_LEFT_PRESS));
+        const sendRightPress = () => send(byteToByteString(ACTION_RIGHT_PRESS));
+
+        const send = (signal) => {
+            try {
+                if (connection.readyState <= WebSocket.OPEN) {
+                    connection.send(signal);
+                    console.log("Sent:", signal, " Action code: " + signal.charCodeAt(0));
+
+                }
+                else tryReconnecting();
+
+            } catch (e) {
+                console.error(e);
+                tryReconnecting();
+
+            }
+        }
+
+        const intToByteString = (a) => {
+            return String.fromCharCode(a & 0xff, (a >> 8) & 0xff, (a >> 16) & 0xff, (a >> 24) & 0xff);
+        }
+
+        const byteToByteString = (a) => {
+            return String.fromCharCode(a & 0xff);
+        }
+
+
 
     </script>
 </body>
