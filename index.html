@@ -20,8 +20,8 @@
 
         html {
             text-orientation: upright;
-            height: 100vh;
-            width: 100vw;
+            height: 100%;
+            width: 100%;
             background: linear-gradient(45deg, var(--color-background), white);
         }
 
@@ -29,6 +29,8 @@
         #container {
             height: 100%;
             width: 100%;
+            margin:0px;
+            padding:0px
         }
 
         #container {
@@ -90,8 +92,8 @@
         }
 
         #touchpad {
-            width: var(--active-height);
             height: var(--active-height);
+            width: calc( 95vw - var(--active-height));
             min-width: 200px;
             display: flex;
             flex-flow: row nowrap;
@@ -279,7 +281,7 @@
             x;
             x;
             circles;
-            el 
+            el
             constructor(el) {
                 this.el = el;
                 this.circles = el.querySelectorAll(":scope > .circle");
@@ -403,6 +405,9 @@
                 touchPadX = ev.targetTouches[0].pageX;
                 touchPadY = ev.targetTouches[0].pageY;
             }
+            t.ontouchcancel = t.ontouchend = (ev) => {
+                touchPadLastX = touchPadLastY = touchPadX = touchPadY = - 1;
+            }
             dialog = document.getElementById("dialog")
             input = document.getElementById("url-input");
             input.onkeydown = (ev) => input.style.color = "";
@@ -483,7 +488,7 @@
         var trying = false;
         var tryingCount = 0;
         const tryReconnecting = () => {
-            connect(url).then(() => showDialog());
+            connect(url).catch(() => showDialog());
         }
 
 
@@ -498,7 +503,7 @@
         }
 
         const sendMoveTo = (x, y) => {
-            send(String.fromCharCode(ACTION_MOVE_TO)  + x + "," + y);
+            send(String.fromCharCode(ACTION_MOVE_TO) + x + "," + y);
         }
 
 
@@ -512,7 +517,7 @@
             try {
                 if (connection.readyState <= WebSocket.OPEN) {
                     connection.send(signal);
-                    console.log("Sent:", signal, " Action code: " + signal.charCodeAt(0));
+                    // console.log("Sent:", signal, " Action code: " + signal.charCodeAt(0));
 
                 }
                 else tryReconnecting();

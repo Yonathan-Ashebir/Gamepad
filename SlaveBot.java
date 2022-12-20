@@ -19,14 +19,22 @@ import java.util.Scanner;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
 
 class SlaveBot {
+    public static int MOUSE_MULTIPLIER = 2;
     public static int DEFAULT_PORT_NO = 3333;
+
     private int portNo = DEFAULT_PORT_NO;
     private boolean started = false;
     private boolean shouldStop = false;
     private Robot myBot = new Robot();
     private Consumer onConnect = null;
+
+    private int SCREEN_X,SCREEN_Y;
+    private GraphicsEnvironment grEnv;
+    private GraphicsDevice grDevice;
 
     private int mouseX = 0;
     private int mouseY = 0;
@@ -59,10 +67,20 @@ class SlaveBot {
     }
 
     SlaveBot() throws AWTException {
+        grEnv = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        grDevice = grEnv.getDefaultScreenDevice();
+        updateScreenInfo();
     }
 
     SlaveBot(int portNo) throws AWTException {
+          this();
         this.portNo = portNo;
+      
+    }
+
+    public void updateScreenInfo() {
+        SCREEN_X = grDevice.getDisplayMode().getWidth();
+        SCREEN_Y = grDevice.getDisplayMode().getHeight();
     }
 
     public synchronized void start() throws IOException {
@@ -183,7 +201,7 @@ class SlaveBot {
                                         state = 0;
 
                                         //handle result from buf
-//                                        handleSignal(buf);
+                                        handleSignal(buf);
 //                                        if (lastSendTime == -1)//info: keep for debugging
 //                                            lastSendTime = System.currentTimeMillis();
 //                                        else {
@@ -192,7 +210,7 @@ class SlaveBot {
 //                                            lastSendTime = cTime;
 //
 //                                        }
-                                        System.out.println("  - Action code: " + buf[0]);
+                                        // System.out.println("  - Action code: " + buf[0]);
 
 
 //                                        String message = new String(buf);
@@ -244,11 +262,11 @@ class SlaveBot {
                     throw new IllegalArgumentException("Bad location to move mouse to");
                 String data = new String(signal, 1, signal.length - 1);
                 int commaInd = data.indexOf(",");
-                int x = Integer.parseInt(data.substring(0, commaInd));
-                int y = Integer.parseInt(data.substring(commaInd + 1));
-                myBot.mouseMove(x, y);
-                mouseX = x;
-                mouseY = y;
+                mouseX = (int) Float.parseFloat(data.substring(0, commaInd));
+                mouseY= (int) Float.parseFloat(data.substring(commaInd + 1));
+                if(mouseX<0)mouseX=0;else if(mouseX>SCREEN_X)mouseX = SCREEN_X;
+                if(mouseY<0)mouseY=0;else if(mouseY>SCREEN_Y)mouseY = SCREEN_Y;
+                myBot.mouseMove(mouseX,mouseY);
                 break;
             case (byte) 5:
                 if (signal.length < 3)
@@ -256,9 +274,16 @@ class SlaveBot {
 
                 data = new String(signal, 1, signal.length - 1);
                 commaInd = data.indexOf(",");
-                int dx = Integer.parseInt(data.substring(0, commaInd));
-                int dy = Integer.parseInt(data.substring(commaInd + 1));
-                myBot.mouseMove(mouseX += dx, mouseY += dy);
+                int dx = (int) Float.parseFloat(data.substring(0, commaInd)) * MOUSE_MULTIPLIER;
+                int dy = (int) Float.parseFloat(data.substring(commaInd + 1)) * MOUSE_MULTIPLIER;
+
+                mouseX +=dx; mouseY += dy;
+                 if(mouseX<0)mouseX=0;else if(mouseX>SCREEN_X)mouseX = SCREEN_X;
+                if(mouseY<0)mouseY=0;else if(mouseY>SCREEN_Y)mouseY = SCREEN_Y;
+
+                myBot.mouseMove(mouseX, mouseY);
+                System.out.println("dx: " + dx + " dy: " + dy);
+                System.out.println("x: " + mouseX + " y: " + mouseY);
                 break;
             case (byte) 6:
                 if (signal.length != 1)
@@ -307,8 +332,8 @@ class SlaveBot {
     }
 
     private static int toIntByBits(byte a) {//byte -> int conversion by bits: not default
-        return a < 0 ? (256+a) : (int) a;
+        return a < 0 ? (256 + a) : (int) a;
     }
 }
 
-//todo: completely tras
+//todo: completely trasve
