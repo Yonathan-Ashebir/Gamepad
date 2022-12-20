@@ -256,7 +256,7 @@
         const ESCAPE_CODE = 12;
 
         const MAX_RETRY = 5;
-        const RETRY_INTERVAL = 300;
+        const WAIT_TIME = 300;
         var joystick,
             joystickLoopId = 0,
 
@@ -408,10 +408,7 @@
             input.onkeydown = (ev) => input.style.color = "";
 
             document.getElementById("connect").onclick = () => {
-                if (connect(input.value))
-                    hideDialog();
-                else
-                    input.style.color = "red";
+                connect(input.value).then(hideDialog, () => input.style.color = "red");
             }
             document.getElementById("disconnect").onclick = () => { disconnect(); showDialog(); }
             let left = document.getElementById("left");
@@ -469,10 +466,14 @@
         const connect = (url) => {
             if (!url.startsWith("ws")) url = "ws://" + url;
             window.url = url;
-            try { connection = new WebSocket(url); } catch (e) {
-                return false;
-            }
-            return true;
+
+            if (connection == null || connection.readyState > WebSocket.OPEN) {
+                connection = new WebSocket(url);
+                return new Promise(((resolve, reject) => {
+                    connection.onopen = resolve;
+                    connection.onerror = reject;
+                }).bind(this));
+            } else return Promise.resolve();
         }
         const disconnect = () => {
             connection.close();
@@ -482,25 +483,10 @@
         var trying = false;
         var tryingCount = 0;
         const tryReconnecting = () => {
-            if (trying) return;
-            _tryingLoop();
+            connect(url).then(() => showDialog());
         }
 
-        const _tryingLoop = () => {
 
-            if (connect(url)) {
-                trying = false;
-                tryingCount = 0;
-            } else {
-                tryingCount++;
-                if (tryingCount >= MAX_RETRY) {
-                    trying = false;
-                    tryingCount = 0;
-                    disconnect();
-                    showDialog();
-                } else setTimeout(_tryingLoop, RETRY_INTERVAL);
-            }
-        }
         const sendCharacter = (char) => {
             sendCharacterCode(char.charCodeAt(0));
         }
@@ -508,11 +494,11 @@
             send(String.fromCharCode(ACTION_CLICK, charCode));
         }
         const sendMoveBy = (dx, dy) => {
-            send(String.fromCharCode(ACTION_MOVE_BY) + intToByteString(dx) + intToByteString(dy));
+            send(String.fromCharCode(ACTION_MOVE_BY) + dx + "," + dy);
         }
 
         const sendMoveTo = (x, y) => {
-            send(String.fromCharCode(ACTION_MOVE_TO) + intToByteString(x) + intToByteString(y));
+            send(String.fromCharCode(ACTION_MOVE_TO)  + x + "," + y);
         }
 
 
