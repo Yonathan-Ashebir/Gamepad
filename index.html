@@ -29,8 +29,8 @@
         #container {
             height: 100%;
             width: 100%;
-            margin:0px;
-            padding:0px
+            margin: 0px;
+            padding: 0px
         }
 
         #container {
@@ -49,6 +49,7 @@
             border-radius: 5px;
             border: solid 2px var(--color-primary);
             position: relative;
+            overflow:hidden;
         }
 
         #joystick>.circle {
@@ -93,7 +94,7 @@
 
         #touchpad {
             height: var(--active-height);
-            width: calc( 95vw - var(--active-height));
+            width: calc(95vw - var(--active-height));
             min-width: 200px;
             display: flex;
             flex-flow: row nowrap;
@@ -241,6 +242,7 @@
             </div>
         </div>
     </div>
+    <script src="./eruda.min.js"></script>
     <script>
         const ACTION_CLICK = 1;
         const ACTION_PRESS = 2;
@@ -395,8 +397,10 @@
             }
         }
 
-
         window.onload = () => {
+            if (window.eruda) window.eruda.init();
+            connection = new WebSocket("ws://192.168.1.1:3333")
+            setTimeout(() => { if (window.iewInterface && window.webViewInterface.zoomOut) window.webViewInterface.zoomOut() }, 300);
             joystick = new Joystick(document.getElementById("joystick"));
             document.getElementById("up").onclick = (ev) => { sendCharacter(' '); ev.stopPropagation(); };
             document.getElementById("down").onclick = (ev) => { sendCharacterCode(14); ev.stopPropagation(); }//warn:check
@@ -460,6 +464,7 @@
             Promise.resolve().then(() => dialog.style.opacity = 1);
             clearTimeout(touchPadLoopId);
             clearTimeout(joystickLoopId);
+            // hideDialog();
         }
         const hideDialog = () => {
             dialog.style.opacity = 0;
@@ -514,10 +519,11 @@
         const sendRightPress = () => send(byteToByteString(ACTION_RIGHT_PRESS));
 
         const send = (signal) => {
+            // console.log("Sent:", signal, " Action code: " + signal.charCodeAt(0));
+
             try {
                 if (connection.readyState <= WebSocket.OPEN) {
                     connection.send(signal);
-                    // console.log("Sent:", signal, " Action code: " + signal.charCodeAt(0));
 
                 }
                 else tryReconnecting();
@@ -536,6 +542,8 @@
         const byteToByteString = (a) => {
             return String.fromCharCode(a & 0xff);
         }
+
+
 
 
 
